@@ -1,0 +1,976 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PVPAI - 智能协作工作台</title>
+    
+    <!-- 核心库 -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Firebase SDK -->
+    <script type="importmap">
+      {
+        "imports": {
+          "firebase/app": "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js",
+          "firebase/firestore": "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js"
+        }
+      }
+    </script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        tech: ['Rajdhani', 'sans-serif'],
+                    },
+                    colors: {
+                        glass: {
+                            100: 'rgba(255, 255, 255, 0.03)',
+                            200: 'rgba(255, 255, 255, 0.05)',
+                            300: 'rgba(255, 255, 255, 0.1)',
+                            border: 'rgba(255, 255, 255, 0.08)',
+                        }
+                    },
+                    animation: {
+                        'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                    },
+                    cursor: {
+                        'col-resize': 'col-resize',
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        body { 
+            background-color: #020617; 
+            color: #cbd5e1; 
+            font-family: 'Inter', sans-serif;
+            background-image: 
+                radial-gradient(circle at 15% 50%, rgba(79, 70, 229, 0.08), transparent 25%), 
+                radial-gradient(circle at 85% 30%, rgba(16, 185, 129, 0.08), transparent 25%);
+            min-height: 100vh;
+            overflow: hidden;
+        }
+
+        /* 滚动条 */
+        ::-webkit-scrollbar { width: 4px; height: 4px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+
+        .input-dark { 
+            background-color: rgba(255, 255, 255, 0.03); 
+            border: 1px solid transparent; 
+            color: white; 
+            padding: 0.75rem 1rem; 
+            border-radius: 0.75rem; 
+            width: 100%; 
+            outline: none; 
+            transition: all 0.3s; 
+            font-size: 0.9rem; 
+        }
+        .input-dark:focus { 
+            background-color: rgba(255, 255, 255, 0.08); 
+            border-color: rgba(255,255,255,0.1); 
+            box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+        }
+        
+        .glass-panel { 
+            background: rgba(15, 23, 42, 0.6); 
+            backdrop-filter: blur(20px); 
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.06); 
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+        
+        .fade-in { animation: fadeIn 0.5s cubic-bezier(0.16, 1, 0.3, 1); }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        
+        .modal-in { animation: modalIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1); }
+        @keyframes modalIn { from { opacity: 0; transform: scale(0.95) translateY(10px); } to { opacity: 1; transform: scale(1) translateY(0); } }
+
+        .project-select { appearance: none; background: transparent; font-weight: 600; cursor: pointer; letter-spacing: -0.01em; }
+        .nowrap-cell { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        
+        .hover-lift { transition: transform 0.2s; }
+        .hover-lift:hover { transform: translateY(-2px); }
+        
+        .todo-item:hover .delete-btn, .twitter-item:hover .action-btns { opacity: 1; }
+        
+        .live-clock { 
+            font-feature-settings: "tnum"; 
+            font-variant-numeric: tabular-nums; 
+            font-family: 'Rajdhani', sans-serif; 
+            letter-spacing: 0.05em;
+        }
+
+        .iris-card {
+            background: linear-gradient(145deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.01) 100%);
+            border: 1px solid rgba(255,255,255,0.05);
+            position: relative;
+            overflow: hidden;
+            transition: all 0.3s;
+        }
+        .iris-card:hover {
+            background: rgba(255,255,255,0.05);
+            border-color: rgba(255,255,255,0.1);
+        }
+
+        .resize-handle {
+            width: 4px;
+            cursor: col-resize;
+            background: transparent;
+            transition: background 0.2s;
+            position: absolute;
+            right: 0;
+            top: 0;
+            bottom: 0;
+            z-index: 50;
+        }
+        .resize-handle:hover, .resize-handle.active {
+            background: rgba(99, 102, 241, 0.5); 
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel" data-type="module">
+        import { initializeApp } from 'firebase/app';
+        import { getFirestore, collection, doc, setDoc, onSnapshot, deleteDoc } from 'firebase/firestore';
+
+        const { useState, useMemo, useEffect, useRef, useCallback } = React;
+
+        const SHARED_FIREBASE_CONFIG = null; 
+
+        const Icon = ({ name, size = 18, className }) => {
+            const ref = useRef(null);
+            useEffect(() => { 
+                if (window.lucide && window.lucide.icons[name] && ref.current) {
+                    ref.current.innerHTML = window.lucide.icons[name].toSvg({ width: size, height: size, class: className }); 
+                }
+            }, [name, size, className]);
+            return <span ref={ref} className="inline-flex items-center justify-center" />;
+        };
+
+        const todayStr = () => {
+            const d = new Date();
+            const year = d.getFullYear();
+            const month = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        };
+
+        const getMonday = (d) => { d = new Date(d); var day = d.getDay(), diff = d.getDate() - day + (day == 0 ? -6 : 1); return new Date(d.setDate(diff)); }
+        
+        const copyToClipboard = (text) => { 
+            const ta = document.createElement("textarea"); ta.value = text; ta.style.position = "fixed"; ta.style.left = "-9999px"; 
+            document.body.appendChild(ta); ta.focus(); ta.select(); 
+            try { document.execCommand('copy'); alert("✅ 内容已复制到剪贴板"); } catch (e) { alert("❌ 复制失败"); } 
+            document.body.removeChild(ta); 
+        };
+
+        // ==========================================
+        // 注入的 JSON 备份数据
+        // ==========================================
+        const DEFAULT_PROJECTS = [
+            {
+                "id": "p1",
+                "name": "PVPAI",
+                "color": "violet",
+                "avatar": "data:image/jpeg;base64,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0/n7Een8/Yj0/n7CEHTsfqURfnfW4b7+1SjP8CQ/4Eh/wACQ/4Eh/wACQ/4Eh/wFNNLWolK9X6t6mzHjms5a4SmzHjms5a4SmzHjms5a4SmzHjms5a4SmzHjms5a4SmzHjtpCW/eYlvXmJb15iW9eYlvXmJb15iW9eYlvXmJb15iW9eYlvXmJb15iW9eYlvXmJb15iW9eYlvXmJb15iW9eYlvXmJb15iW9eYInnlubP29R7f4ZP/EACcQAAEDAwMEAgMBAAAAAAAAAAEA8PERQFEwwdEgITFBUGFxkJFg/9oACAEBAAE/If1K192A6g0NQFQlQlQlQlQlQlQlQlQlQlQlQlQlQlQlQlQlQBVEJaVBW+a8/kkNefySGvP5JDXn8khrz6g8Bqkj2GhZZZZZZZ5sQCoPVSyDqiPfWQYYYYQFH9gJardrz6nvGg3+2q/4Fu159T3jQb/bVb8C3a8+p7xoN/tqt+BbtefU940G/wBtVvwLdrz6nvGg3+2q34Fu159T3jQb/bVb8C3a8+p7xoN/tqt+BbtefU940G/wBtVvwLdrz6nvGg3+2q34FuLA3wShTs3Ts3Ts3Ts3Ts3R+eOxBpHQDvC4EAnZunZunZunZunZunZunZunZunZunZunZunZuhYAQeK9H9/xIjBST90IqccqccqccqccqccqccqccqccqccqccqccqccqccqiyWYALrodVySewoU45U45U45U45U45QbABgnv2t3rPWcstX5vwLdrz1nLLV+b8C3a89Zyy1fm/At3/PWcstX5vwLcc5AFSncU9KCVBKglQSoJUEoCSCBA9z+UPHUOOKQDQKmuFK8VK8VK8VK8VK8VK8VXfMGitaAevx1N+BfMuCHizb8C+ZcEPFm34F8y4IeLNvwL5lwQ8WbfgXzPghZn/AvhIhBHcEWgQwwwwwwwwwwwwwwwwww4F3AWj+/pk//aAAwDAQACAAMAAAAQ88888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888cPNNNNNNNNJ88888888888888XBBBBBBBBBD88888888888888XBBBBBBBBBD88888888888888XBBQNMMbBBXBBRP8888888888XBBBU88oBBBBBBp8888888888VBBBU88qBBBBBBp88888888884AAC888aCCCCACS8888888888NAAAAAAd888oAAd8888888888WBBBBBBV888rBBp8888888888TABBuBBWOOOoBBp88888888888888VBBBBBBBBBp88888888888888VBBBBBBBBBp88888888888888RNNNNNNNNM788888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888//EACARAAIBAwUBAQAAAAAAAAAAAAARATFRcRAgMEBBcFD/2gAIAQMBAT8Q+NxDlcVVVUkHz0OzUOzUNZGsNYaw8tUEZGRkMLjoa0daKGtH58VQJYSwlhLCWEsRiFsjCCWEsQXGob/GyhzESpeyqCjWSjYBFQukeuyeu0bAwMDAwMDAwMBh/HP/xAAnEQABAgMHBQEBAAAAAAAAAAABABFhkdEwMVGhsfDxECAhQcFwcf/aAAgBAgEBPxD8bEI4AkgQDrfiq34qt+Krfiq34qt+Krfiq34qt+KpjkWJct6bAxt9+wNlmuot9+wNlmuot9+wPUB/2AmVwwXBBcEEfI5jEAeifnUuFJiGJa9qKAmaKAmaKAmaJx4d4Hm4tZ79geuwYjs2sD35vUbPbsCoShK5XIOwCWt2KhKEoShKEoSEh/E6mzIBDFQkgoSQQD6SHYFYHUNIKGkFDSChJBQkgoSQQBgYWZm2IMCLwWK5FVciquRVXIqrkVVyKqApmhjknHHsFoBDAEgXCK5FVciqiWCE+SXN592e/YHvyv12ZgaDrnzqbO9iAH9IZQkQkQkQkHBZeZi93PUtGAAN4e51GTKMmUZMjKOTx69DrmzqbfL/FlmzqbfL/Flmzqbc+i894d3aigJGqgJGqgJGqgJGqgJGqgJGqgJGqgJGqgpGqeeHef6X/HP//EACkQAAIABQMEAgMAAwAAAAAAAAABEUCBwfAgITEwQVGhYXFQkJEQsdH/2gAIAQEAAT8Q/TJD4KFChQoUKFChQoUKFChQp/hbOeY2+j6ZUV8NJyiAAAAAAAAAAAAAAAAACS61VQik4uC7zqlbeI8OdUrbzHhzqlbeY8OdUrbzHhzq123k4QUhctvsjCrmFXMKuYVcwq5hVzCLisPxToeU1s9PYZN24WW5RSM8sZxYzixnFjOLGeWHI3aSMuUoreWWu3tfjGNuL/6ReMi8ZF4yLxkXjIvyxt5+f4N9LXbzvmPl6ke56y6UqtdvO+Y+XqR7nrLpSq12875j5epHuesulKrXbzvmPl6ke96y6UtHrJF1RUHBrfjVcuXLlxWt4vI8NN76+4nQ0FIfCTgurcuXLly5cuXLly49WMVWN8ROEvAoUKFChD46GxQoUKFChQoUKFCkuvoeuvRpMk4+UuratWrVq1atWrVq0lbmoJxN7AS/i1um8Tzi8Nmu7er1atWrTId8kCRpbt+Zb/fWL9uRNd3uQ76nW0JVS1tV7nWOlKqWtqvc6x0pVHA1nToLtjY2NjY2F/p1jpSyHIwRY7RiT4fnXQoUKFDhF8EQJITarGij8rVFTeajmSjx31uXLly5csirbsmwKBKEEO+p0p65x/Uo6U9c4/qUdKeucf1KOlPXOP6lHSnqHF9fkfTQrphBprhowi5hlzDLmGXMMuYZcwy5hlzDLmGXMMuYZcwy5hlzDLmGXMMuYZcwy48LbQxny1Ft+mT/2Q=="
+            },
+            {
+                "id": "p2",
+                "name": "Orbit AI",
+                "color": "cyan",
+                "avatar": "data:image/jpeg;base64,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"
+            }
+        ];
+        const DEMO_CONTACTS = [
+            {
+                "name": "Solflare Community",
+                "handle": "@SolflareEmpire",
+                "platform": "Solana / Wallet ",
+                "tier": "Tier 1",
+                "status": "Contacted",
+                "contactDate": "2025-12-28",
+                "notes": "Solana 头部钱包。切入点：Mystery Quests 活动。策略：利用我们支持 Stock/Prediction Market 的特性 ，申请成为他们的 Quest 任务方。背书：提及 GMGN 合作和 Solaris 加速器背景  增加信任度。",
+                "id": "1766880005654",
+                "projectId": "p1",
+                "lastUpdated": "2025-12-28"
+            }
+        ];
+        const DEMO_INCUBATORS = [
+            {
+                "name": "Indie",
+                "link": "https://hackathon.indie.fun/",
+                "status": "Selected",
+                "submitDate": "2025-12-11",
+                "notes": "等待最终结果",
+                "id": "1766880145287",
+                "projectId": "p1",
+                "lastUpdated": "2025-12-28"
+            },
+            {
+                "name": "Kalshi",
+                "link": "https://kalshi.com/builders",
+                "status": "Applied",
+                "submitDate": "2025-12-10",
+                "notes": "等通知\n",
+                "id": 1766880124836,
+                "projectId": "p1",
+                "lastUpdated": "2025-12-28"
+            },
+            {
+                "name": "Polymarket builders",
+                "link": "https://builders.polymarket.com/",
+                "status": "Applied",
+                "submitDate": "2025-12-10",
+                "notes": "等通知",
+                "id": 1766880095712,
+                "projectId": "p1",
+                "lastUpdated": "2025-12-28"
+            },
+            {
+                "name": "HF0",
+                "link": "https://www.hf0.com/apply",
+                "status": "Applied",
+                "submitDate": "2025-12-20",
+                "notes": "等通知",
+                "id": 1766880078430,
+                "projectId": "p1",
+                "lastUpdated": "2025-12-28"
+            }
+        ];
+        const DEMO_TWITTER = [
+            {
+                "text": "蹭热度：针对垂直领域大V发布的推文进行高质量引用及评论",
+                "fixed": true,
+                "id": 1766883401196,
+                "projectId": "p1",
+                "lastUpdated": "2025-12-28"
+            },
+            {
+                "text": "产品动态：同步产品的更新进展及功能升级情况",
+                "fixed": true,
+                "id": 1766883376988,
+                "projectId": "p1",
+                "lastUpdated": "2025-12-28"
+            },
+            {
+                "text": "创意内容：发布具有强网感、趣味性或“抽象”风格的内容",
+                "fixed": true,
+                "id": 1766883352111,
+                "projectId": "p1",
+                "lastUpdated": "2025-12-28"
+            },
+            {
+                "text": "投研分析：结合收益分享图撰写详细严谨专业的投研报告",
+                "fixed": true,
+                "id": 1766883335535,
+                "projectId": "p1",
+                "lastUpdated": "2025-12-28"
+            },
+            {
+                "text": "开市前瞻：筛选每日核心资讯，并在开盘前发布专业的前瞻性分析",
+                "fixed": true,
+                "id": 1766883269206,
+                "projectId": "p1",
+                "lastUpdated": "2025-12-28"
+            }
+        ];
+        const DEMO_TODOS = [
+            {
+                "text": "Deck优化",
+                "deadline": "",
+                "fixed": true,
+                "id": "1766885675478",
+                "projectId": "p1",
+                "lastUpdated": "2025-12-28"
+            },
+            {
+                "text": "每日发推 ",
+                "deadline": "",
+                "fixed": true,
+                "id": "t1",
+                "projectId": "p1",
+                "lastUpdated": "2025-12-28"
+            },
+            {
+                "text": "每日 BD 拓展-20条",
+                "deadline": "",
+                "fixed": true,
+                "id": "t2",
+                "projectId": "p1",
+                "lastUpdated": "2025-12-28"
+            }
+        ];
+        const DEMO_SCRIPTS = [
+            {
+                "id": "s1",
+                "projectId": "p1",
+                "title": "BD 破冰 (通用)",
+                "content": "Hi [Name]! 👋 我是 PVPAI 的 BD (Solana Hackathon 获奖项目)。\n我们正在构建 AI 交易执行层，目前已接入 GMGN。\n觉得咱们用户重叠度很高，有没有兴趣做个互推？"
+            }
+        ];
+        const DEMO_DOCS = [
+            {
+                "name": "PVPAI",
+                "type": "Deck",
+                "link": "https://docsend.com/view/m25f3s2fvbrazw9k",
+                "content": "https://docsend.com/view/m25f3s2fvbrazw9k",
+                "id": 1766882210293,
+                "projectId": "p1",
+                "lastUpdated": "2025-12-28",
+                "uploadDate": "2025-12-28"
+            }
+        ];
+
+        const STATUS_MAP = { 'To Contact': {label:'⚪ 待联系',color:'text-slate-400'}, 'Contacted':{label:'🔵 已私信',color:'text-blue-400'}, 'Replied':{label:'🟣 已回复',color:'text-violet-400'}, 'Interested':{label:'🟢 有意向',color:'text-emerald-400'}, 'Partnered':{label:'🏆 已合作',color:'text-amber-400'}, 'Rejected':{label:'🔴 已拒绝',color:'text-red-400'} };
+        const INCUBATOR_STATUS = { 'Preparing':{label:'🟡 准备中',color:'bg-yellow-500/10 text-yellow-300 border-yellow-500/20'}, 'Applied':{label:'🔵 已投递',color:'bg-blue-500/10 text-blue-300 border-blue-500/20'}, 'Selected':{label:'🟣 已入选',color:'bg-violet-500/10 text-violet-300 border-violet-500/20'}, 'Partnered':{label:'🏆 已合作',color:'bg-amber-500/10 text-amber-300 border-amber-500/20'}, 'GivenUp':{label:'⚪️ 已放弃',color:'bg-slate-500/10 text-slate-400 border-slate-500/20'} };
+        const TIER_MAP = { 'Tier 1':'bg-yellow-500/10 text-yellow-300 border-yellow-500/20', 'Tier 2':'bg-blue-500/10 text-blue-300 border-blue-500/20', 'Tier 3':'bg-slate-500/10 text-slate-300 border-slate-500/20' };
+
+        const App = () => {
+            const [activeTab, setActiveTab] = useState('twitter'); 
+            const [bdSubTab, setBdSubTab] = useState('targets'); 
+            const [currentTime, setCurrentTime] = useState(new Date());
+            
+            const [sidebarWidth, setSidebarWidth] = useState(280);
+            const [isResizing, setIsResizing] = useState(false);
+            const [sidebarImage, setSidebarImage] = useState(() => localStorage.getItem('v30_sidebar_img') || null); // 左下角图片状态
+            
+            const startResizing = useCallback(() => { setIsResizing(true); }, []);
+            const stopResizing = useCallback(() => { setIsResizing(false); }, []);
+            const resize = useCallback((mouseMoveEvent) => {
+                if (isResizing) {
+                    const newWidth = mouseMoveEvent.clientX;
+                    if (newWidth > 200 && newWidth < 600) { setSidebarWidth(newWidth); }
+                }
+            }, [isResizing]);
+
+            useEffect(() => {
+                window.addEventListener("mousemove", resize);
+                window.addEventListener("mouseup", stopResizing);
+                return () => {
+                    window.removeEventListener("mousemove", resize);
+                    window.removeEventListener("mouseup", stopResizing);
+                };
+            }, [resize, stopResizing]);
+
+            useEffect(() => { localStorage.setItem('v30_sidebar_img', sidebarImage || ''); }, [sidebarImage]);
+
+
+            const [projects, setProjects] = useState(() => JSON.parse(localStorage.getItem('v30_projects')) || DEFAULT_PROJECTS);
+            const [activePid, setActivePid] = useState(() => localStorage.getItem('v30_activePid') || 'p1');
+            // 使用备份中的 userProfile
+            const [userProfile, setUserProfile] = useState(() => JSON.parse(localStorage.getItem('v30_profile')) || { name: "Alex", title: "BD Lead" });
+            // 使用备份中的 settings
+            const [settings, setSettings] = useState(() => JSON.parse(localStorage.getItem('v30_settings')) || { dailyTarget: 20 });
+            // 使用备份数据初始化 localDb
+            const [localDb, setLocalDb] = useState(() => JSON.parse(localStorage.getItem('v30_db')) || { contacts: DEMO_CONTACTS, incubators: DEMO_INCUBATORS, twitter: DEMO_TWITTER, todos: DEMO_TODOS, scripts: DEMO_SCRIPTS, docs: DEMO_DOCS });
+            const [cloudDb, setCloudDb] = useState(null);
+            const [isOnline, setIsOnline] = useState(false);
+            const [dbInstance, setDbInstance] = useState(null);
+
+            const firebaseConfig = SHARED_FIREBASE_CONFIG || JSON.parse(localStorage.getItem('v30_fb_config') || 'null');
+
+            useEffect(() => {
+                if (firebaseConfig && firebaseConfig.apiKey) {
+                    try {
+                        const app = initializeApp(firebaseConfig);
+                        const firestore = getFirestore(app);
+                        setDbInstance(firestore);
+                        const cols = ['contacts', 'incubators', 'twitter', 'todos', 'scripts', 'docs'];
+                        const unsubs = [];
+                        const newCloudDb = { contacts:[], incubators:[], twitter:[], todos:[], scripts:[], docs:[] };
+                        cols.forEach(col => {
+                            const unsub = onSnapshot(collection(firestore, 'pvpai_data', 'default_space', col), (snap) => {
+                                const list = snap.docs.map(d => ({ ...d.data(), id: d.id }));
+                                newCloudDb[col] = list;
+                                setCloudDb(prev => ({ ...(prev || { contacts:[], incubators:[], twitter:[], todos:[], scripts:[], docs:[] }), [col]: list }));
+                            });
+                            unsubs.push(unsub);
+                        });
+                        setIsOnline(true);
+                        return () => unsubs.forEach(u => u());
+                    } catch (err) { setIsOnline(false); }
+                }
+            }, []);
+
+            useEffect(() => { if (!isOnline) localStorage.setItem('v30_db', JSON.stringify(localDb)); }, [localDb, isOnline]);
+            useEffect(() => { localStorage.setItem('v30_projects', JSON.stringify(projects)); }, [projects]);
+            useEffect(() => { localStorage.setItem('v30_activePid', activePid); }, [activePid]);
+            useEffect(() => { localStorage.setItem('v30_settings', JSON.stringify(settings)); }, [settings]);
+            useEffect(() => { const t = setInterval(() => setCurrentTime(new Date()), 1000); return () => clearInterval(t); }, []);
+
+            const db = isOnline && cloudDb ? cloudDb : localDb;
+            const activeProject = projects.find(p => p.id === activePid) || projects[0];
+            const currentContacts = db.contacts.filter(c => c.projectId === activePid);
+            const currentIncubators = db.incubators.filter(i => i.projectId === activePid);
+            const currentTwitter = db.twitter.filter(t => t.projectId === activePid);
+            const currentScripts = db.scripts.filter(s => s.projectId === activePid);
+            const currentDocs = db.docs.filter(d => d.projectId === activePid);
+            const currentTodos = db.todos;
+
+            const [modal, setModal] = useState({ open: false, type: '', data: null });
+            const [reportModal, setReportModal] = useState({ open: false, type: 'daily' });
+            const [generatedReport, setGeneratedReport] = useState('');
+            const [filterStatus, setFilterStatus] = useState('All');
+            const [incubatorFilter, setIncubatorFilter] = useState('All');
+            const [incubatorSort, setIncubatorSort] = useState('Newest');
+            const [searchTerm, setSearchTerm] = useState('');
+            const [isEditingKPI, setIsEditingKPI] = useState(false);
+
+            const stats = useMemo(() => {
+                const today = todayStr();
+                const todayAction = currentContacts.filter(c => c.contactDate === today || c.lastUpdated === today).length;
+                const partnered = currentContacts.filter(c => c.status === 'Partnered').length;
+                const kpiProgress = Math.min(Math.round((todayAction / settings.dailyTarget) * 100), 100);
+                const weeklyNew = currentContacts.filter(c => new Date(c.contactDate) >= getMonday(new Date())).length;
+                return { todayAction, weeklyNew, partnered, kpiProgress };
+            }, [currentContacts, settings.dailyTarget]);
+
+            const saveData = async (type, item) => {
+                const collectionName = type === 'contact' ? 'contacts' : type === 'incubator' ? 'incubators' : type === 'doc' ? 'docs' : type === 'todo' ? 'todos' : type === 'script' ? 'scripts' : 'twitter';
+                const id = item.id ? String(item.id) : String(Date.now());
+                const newItem = { ...item, id, projectId: activePid, lastUpdated: todayStr() };
+                if (!item.contactDate && type === 'contact') newItem.contactDate = todayStr();
+                if (!item.submitDate && type === 'incubator') newItem.submitDate = todayStr();
+                if (!item.uploadDate && type === 'doc') newItem.uploadDate = todayStr();
+
+                if (isOnline && dbInstance) {
+                    await setDoc(doc(dbInstance, 'pvpai_data', 'default_space', collectionName, id), newItem);
+                } else {
+                    const list = localDb[collectionName] || [];
+                    const newList = item.id ? list.map(x => String(x.id) === id ? newItem : x) : [newItem, ...list];
+                    setLocalDb({ ...localDb, [collectionName]: newList });
+                }
+                setModal({ open: false, type: '', data: null });
+            };
+
+            const deleteData = async (type, id) => {
+                if(!confirm("确定要删除这条记录吗？")) return;
+                const collectionName = type === 'contact' ? 'contacts' : type === 'incubator' ? 'incubators' : type === 'doc' ? 'docs' : type === 'todo' ? 'todos' : type === 'script' ? 'scripts' : 'twitter';
+                if (isOnline && dbInstance) {
+                    await deleteDoc(doc(dbInstance, 'pvpai_data', 'default_space', collectionName, String(id)));
+                } else {
+                    setLocalDb({ ...localDb, [collectionName]: localDb[collectionName].filter(x => String(x.id) !== String(id)) });
+                }
+                setModal({ open: false, type: '', data: null });
+            };
+
+            const toggleTodoDone = (e, id) => { 
+                e.stopPropagation(); 
+                const item = currentTodos.find(t => String(t.id) === String(id));
+                if(item) saveData('todo', { ...item, done: !item.done });
+            };
+            
+            const toggleTwitterDone = (e, id) => { 
+                e.stopPropagation(); 
+                const item = currentTwitter.find(t => String(t.id) === String(id));
+                if(item) saveData('twitter', { ...item, done: !item.done, lastDone: todayStr() });
+            };
+
+            const generateReport = (type) => {
+                const today = todayStr();
+                const monday = getMonday(new Date());
+                let text = "";
+                if (type === 'global_daily') {
+                    text = `🚀 【${activeProject.name}】 每日运营综述 | ${today}\n\n`;
+                    const doneTodos = currentTodos.filter(t => t.done);
+                    text += `📝 【新增任务】\n`;
+                    if(doneTodos.length) doneTodos.forEach(t => text += `  [x] ${t.text}\n`); else text += `  (无完成项)\n`;
+                    const doneTwits = currentTwitter.filter(t => t.done || t.lastDone === today);
+                    text += `\n🐦 【社媒运营】\n`;
+                    if(doneTwits.length) doneTwits.forEach(t => text += `  [x] ${t.text}\n`); else text += `  (无)\n`;
+                    const bdItems = currentContacts.filter(c => c.contactDate === today || c.lastUpdated === today);
+                    const bdWins = bdItems.filter(c => ['Replied', 'Interested', 'Partnered'].includes(c.status));
+                    text += `\n💼 【BD 拓展概况】\n`;
+                    text += `  • 触达: ${bdItems.length} (KPI:${settings.dailyTarget})\n`;
+                    text += `  • 意向: ${bdWins.length}\n`;
+                } else if (type === 'crm_daily') {
+                    const items = currentContacts.filter(c => c.contactDate === today || c.lastUpdated === today);
+                    const replied = items.filter(c => ['Replied', 'Interested', 'Partnered'].includes(c.status));
+                    text = `🛡️ 【BD 专项日报】 ${today}\n\n• 触达: ${items.length} | 意向: ${replied.length}\n\n【重点产出】\n`;
+                    if (replied.length > 0) replied.forEach(c => text += `🔥 ${c.name}: ${STATUS_MAP[c.status].label.split(' ')[1]} - ${c.notes}\n`); else text += `(蓄客期)\n`;
+                    text += `\n【触达清单】\n`;
+                    items.forEach((c, i) => text += `${i+1}. ${c.name} (${c.tier})\n`);
+                } else if (type === 'crm_weekly') {
+                    const wins = currentContacts.filter(c => new Date(c.lastUpdated) >= monday && ['Interested', 'Partnered'].includes(c.status));
+                    text = `📊 【BD 周报】\n本周拓展 ${stats.weeklyNew} 个，意向 ${wins.length} 个。\n\n【关键产出】\n`;
+                    wins.forEach(c => text += `🏆 ${c.name}: ${c.notes}\n`);
+                } else if (type === 'crm_total') {
+                    text = `🔍 【BD 总览】\n• Pipeline: ${currentContacts.length}\n• 重点(T1): ${currentContacts.filter(c=>c.tier==='Tier 1').length}\n• 已合作: ${stats.partnered}\n`;
+                }
+                setGeneratedReport(text);
+                setReportModal({ open: true, type });
+            };
+
+            const exportData = () => { const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([JSON.stringify({db: localDb, projects, userProfile, settings})],{type:'application/json'})); a.download=`pvpai_backup_${todayStr()}.json`; a.click(); };
+            const importData = (e) => { const f=e.target.files[0]; if(f){ const r=new FileReader(); r.onload=ev=>{ try{ const d=JSON.parse(ev.target.result); if(d.db)setLocalDb(d.db); if(d.projects)setProjects(d.projects); if(d.settings)setSettings(d.settings); alert("导入成功！"); }catch(e){alert("错误");} }; r.readAsText(f); }};
+            const handleConfigPaste = (e) => { try { const cfg = JSON.parse(e.target.value); localStorage.setItem('v30_fb_config') || 'null'; localStorage.setItem('v30_fb_config', JSON.stringify(cfg)); alert("配置已保存，请刷新页面生效"); } catch (err) { alert("JSON 格式错误"); } };
+
+            return (
+                <div className="flex h-screen overflow-hidden text-slate-200">
+                    {/* 侧边栏 */}
+                    <aside 
+                        style={{ width: sidebarWidth }}
+                        className="bg-[#020617]/80 border-r border-white/5 flex flex-col backdrop-blur-2xl z-20 flex-shrink-0 shadow-2xl relative"
+                    >
+                        {/* 拖拽手柄 */}
+                        <div className={`resize-handle ${isResizing ? 'active' : ''}`} onMouseDown={startResizing}></div>
+
+                        {/* 顶部区域：高度固定 h-28，与右侧 Header 高度一致，实现横杠对齐 */}
+                        <div className="h-28 px-6 flex flex-col justify-center border-b border-white/5 bg-gradient-to-b from-slate-900/40 to-transparent">
+                            {/* 顶部时间 */}
+                            <div className="flex justify-between items-center mb-1">
+                                <div className="text-4xl font-bold text-white live-clock tracking-wide text-shadow">
+                                    {currentTime.toLocaleTimeString('en-US', {hour12:false, hour:'2-digit', minute:'2-digit', second:'2-digit'})}
+                                </div>
+                                <div className="flex flex-col items-center gap-1">
+                                    <div className={`w-2.5 h-2.5 rounded-full shadow-[0_0_12px_rgba(52,211,153,0.8)] ${isOnline ? 'bg-emerald-400 animate-pulse-slow' : 'bg-emerald-500/80 animate-pulse-slow'}`} title={isOnline ? "云端同步中" : "本地模式 (点亮)"}></div>
+                                </div>
+                            </div>
+                            {/* 日期 - 增加年份显示 */}
+                            <div className="text-xs text-slate-500 uppercase tracking-[0.1em] font-medium pl-1">
+                                {currentTime.toLocaleDateString('zh-CN', {year: 'numeric', month: 'long', day: 'numeric', weekday: 'long'})}
+                            </div>
+                        </div>
+                        
+                        {/* 今日待办 - 增加底部间距 pb-2 -> pb-6 */}
+                        <div className="px-6 pt-5 pb-6">
+                            <div className="flex items-center gap-2 opacity-90 pl-1">
+                                <div className="w-1.5 h-6 rounded-full bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]"></div>
+                                <Icon name="list-todo" size={20} className="text-emerald-400"/>
+                                <h2 className="font-extrabold text-slate-100 text-lg tracking-wide">今日待办</h2>
+                            </div>
+                        </div>
+                        
+                        {/* 待办列表 */}
+                        <div className="flex-1 overflow-y-auto px-4 pt-0 pb-4 space-y-2 custom-scrollbar mb-20">
+                            {currentTodos.sort((a,b) => (b.fixed===true) - (a.fixed===true)).map(todo => (
+                                <div key={todo.id} onClick={()=>setModal({open:true, type:'todo', data:todo})} className={`group todo-item p-3.5 rounded-xl border transition-all duration-300 cursor-pointer ${todo.done ? 'bg-slate-900/20 border-transparent opacity-40 hover:opacity-60' : 'bg-glass-100 border-white/5 hover:border-emerald-500/30 hover:bg-glass-200 hover:shadow-lg hover:shadow-emerald-900/10 hover:-translate-y-0.5'}`}>
+                                    <div className="flex items-start gap-3 relative pr-6">
+                                        <button onClick={(e)=>toggleTodoDone(e, todo.id)} className={`mt-0.5 w-4 h-4 rounded-md border flex items-center justify-center transition-all flex-shrink-0 ${todo.done ? 'bg-emerald-600 border-emerald-600' : 'border-slate-600 group-hover:border-emerald-500'}`}>{todo.done && <Icon name="check" size={10} className="text-white"/>}</button>
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex items-start gap-2">
+                                                <p className={`text-sm font-medium leading-relaxed ${todo.done ? 'line-through text-slate-500' : 'text-slate-200'}`}>{todo.text}</p>
+                                                {todo.fixed && <Icon name="pin" size={12} className="text-amber-400 flex-shrink-0 ml-1 mt-0.5"/>}
+                                            </div>
+                                            {todo.deadline && (
+                                                <div className="mt-2 text-[10px] text-slate-400 bg-slate-950/30 px-2 py-0.5 rounded border border-white/5 flex items-center gap-1 w-fit font-mono">
+                                                    <Icon name="calendar-clock" size={10}/> {todo.deadline.replace('T', ' ')}
+                                                </div>
+                                            )}
+                                        </div>
+                                        <div className="absolute top-0 right-0 opacity-0 group-hover:opacity-100 transition-opacity delete-btn">
+                                            <button onClick={(e)=>{e.stopPropagation(); deleteData('todo', todo.id)}} className="text-slate-400 hover:text-red-400 p-1"><Icon name="trash-2" size={14}/></button>
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                            <button onClick={()=>setModal({open:true, type:'todo', data:null})} className="w-full py-3 border border-dashed border-slate-700/50 hover:border-slate-500/50 rounded-xl text-slate-500 hover:text-slate-300 text-xs flex items-center justify-center gap-2 transition-all hover:bg-white/5 group"><Icon name="plus" size={14} className="group-hover:scale-110 transition-transform"/> 添加事项</button>
+                        </div>
+
+                        {/* 左下角 - 保持不变 */}
+                        <div className="absolute bottom-0 left-0 w-full p-4 bg-gradient-to-t from-[#020617] via-[#020617] to-transparent pointer-events-none">
+                            <div className="iris-card p-4 rounded-xl flex items-center justify-between pointer-events-auto">
+                                <div className="flex items-center gap-3">
+                                    <label className="w-10 h-10 rounded-lg bg-indigo-500/20 border border-indigo-500/50 flex items-center justify-center shadow-[0_0_15px_rgba(99,102,241,0.3)] cursor-pointer hover:bg-indigo-500/30 transition-colors group relative overflow-hidden">
+                                        {sidebarImage ? <img src={sidebarImage} className="w-full h-full object-cover"/> : <Icon name="cpu" size={18} className="text-indigo-300"/>}
+                                        <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <Icon name="upload" size={12} className="text-white"/>
+                                        </div>
+                                        <input type="file" className="hidden" accept="image/*" onChange={e=>{
+                                            const f=e.target.files[0]; 
+                                            if(f){ const r=new FileReader(); r.onload=ev=>setSidebarImage(ev.target.result); r.readAsDataURL(f); }
+                                        }}/>
+                                    </label>
+                                    <div>
+                                        <div className="text-sm font-bold text-white font-tech tracking-wider">IRIS WORKSTATION</div>
+                                    </div>
+                                </div>
+                                <div className="h-full flex items-end">
+                                     <div className="flex gap-0.5 items-end h-4">
+                                        <div className="w-1 bg-indigo-500/40 h-2 animate-pulse"></div>
+                                        <div className="w-1 bg-indigo-500/60 h-3 animate-pulse" style={{animationDelay:'0.1s'}}></div>
+                                        <div className="w-1 bg-indigo-500/80 h-4 animate-pulse" style={{animationDelay:'0.2s'}}></div>
+                                     </div>
+                                </div>
+                            </div>
+                        </div>
+                    </aside>
+
+                    {/* 主内容区 */}
+                    <div className="flex-1 flex flex-col min-w-0 relative">
+                        {/* 顶部导航 */}
+                        <header className="h-28 border-b border-white/5 flex items-center justify-between px-10 backdrop-blur-xl z-10 bg-[#020617]/60 sticky top-0">
+                            <div className="flex items-center gap-8">
+                                <div className="relative group cursor-pointer flex items-center gap-5">
+                                    {/* 头像 */}
+                                    <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-white font-bold bg-gradient-to-br from-${activeProject.color}-600 to-${activeProject.color}-900 shadow-[0_0_15px_rgba(79,70,229,0.3)] border border-white/10 ring-1 ring-white/5 transition-transform group-hover:scale-105`}>
+                                        {activeProject.avatar ? <img src={activeProject.avatar} className="w-full h-full object-cover rounded-2xl"/> : <span className="text-xl">{activeProject.name[0]}</span>}
+                                    </div>
+                                    <div className="relative">
+                                        {/* 项目名称字体缩小 text-xl -> text-lg */}
+                                        <select className="bg-transparent text-lg font-bold text-white outline-none cursor-pointer project-select pr-8 hover:text-indigo-300 transition-colors" value={activePid} onChange={e=>setActivePid(e.target.value)}>{projects.map(p => <option key={p.id} value={p.id} className="bg-slate-900 text-white">{p.name}</option>)}</select>
+                                        <Icon name="chevron-down" size={18} className="text-slate-500 absolute right-0 top-1/2 -translate-y-1/2 pointer-events-none"/>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="flex items-center gap-2 bg-slate-900/60 p-2 rounded-2xl border border-white/5 backdrop-blur-md shadow-inner overflow-x-auto no-scrollbar">
+                                {[{id:'twitter',icon:'twitter',l:'推特运营'}, {id:'crm',icon:'users',l:'BD拓展'}, {id:'incubator',icon:'rocket',l:'孵化器'}, {id:'docs',icon:'file-text',l:'文档'}, {id:'settings',icon:'settings',l:'设置'}].map(tab => (
+                                    /* 分类 Tab：不换行(whitespace-nowrap)，更长(px-7)，字体稍大(text-[15px]) */
+                                    <button key={tab.id} onClick={()=>setActiveTab(tab.id)} className={`px-7 py-3 rounded-xl text-[15px] whitespace-nowrap font-semibold flex items-center gap-2.5 transition-all duration-300 ${activeTab===tab.id ? 'bg-gradient-to-br from-indigo-600 to-violet-600 text-white shadow-lg shadow-indigo-500/25 ring-1 ring-white/10' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}>
+                                        <Icon name={tab.icon} size={18} className={activeTab===tab.id ? "animate-pulse" : ""}/> {tab.l}
+                                    </button>
+                                ))}
+                            </div>
+
+                            {/* 生成日报按钮 */}
+                            <button onClick={()=>{setReportModal({open:true, type:'global_daily'}); generateReport('global_daily');}} className="bg-emerald-600/10 hover:bg-emerald-600 text-emerald-400 hover:text-white border border-emerald-500/20 hover:border-emerald-500 px-8 py-3.5 rounded-xl text-sm font-bold flex items-center gap-2.5 transition-all hover:shadow-[0_0_15px_rgba(16,185,129,0.3)] group whitespace-nowrap">
+                                <Icon name="sparkles" size={16} className="group-hover:rotate-12 transition-transform"/> 生成日报
+                            </button>
+                        </header>
+
+                        <main className="flex-1 overflow-y-auto p-10 fade-in scroll-smooth">
+                            {/* TAB: 推特 */}
+                            {activeTab === 'twitter' && (
+                                <div className="fade-in max-w-5xl mx-auto">
+                                    <div className="flex justify-between items-center mb-8">
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-1.5 h-8 rounded-full bg-sky-500 shadow-[0_0_10px_rgba(14,165,233,0.5)]"></div>
+                                            <Icon name="twitter" className="text-sky-500" size={32}/>
+                                            {/* 字体缩小 text-2xl -> text-xl */}
+                                            <h2 className="text-xl font-bold text-white tracking-tight">推特任务看板</h2>
+                                        </div>
+                                        {/* 按钮缩小 text-sm -> text-xs, padding 调整 */}
+                                        <button onClick={()=>setModal({open:true, type:'twitter', data:null})} className="bg-sky-600 hover:bg-sky-500 text-white px-4 py-2 rounded-xl flex items-center gap-2 text-xs font-medium shadow-lg hover:shadow-sky-500/20 transition-all hover:-translate-y-0.5"><Icon name="plus" size={16}/> 新建任务</button>
+                                    </div>
+                                    <div className="space-y-4">
+                                        {currentTwitter.sort((a,b)=>(b.fixed===true)-(a.fixed===true)).map(t => (
+                                            <div key={t.id} className={`p-5 rounded-2xl border flex items-center gap-5 transition-all group twitter-item cursor-pointer hover-lift ${t.done ? 'bg-sky-900/10 border-sky-500/10 opacity-60' : 'glass-panel border-white/5 hover:border-sky-500/30'}`}>
+                                                <button onClick={(e)=>toggleTwitterDone(e, t.id)} className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${t.done ? 'bg-sky-500 border-sky-500' : 'border-slate-600 hover:border-sky-400'}`}>{t.done && <Icon name="check" size={14} className="text-white"/>}</button>
+                                                <div className="flex-1 cursor-pointer" onClick={()=>setModal({open:true, type:'twitter', data:t})}>
+                                                    {/* 内容字体缩小 text-lg -> text-sm */}
+                                                    <div className="flex items-center gap-3"><p className={`font-medium text-sm ${t.done ? 'text-sky-200/40 line-through' : 'text-slate-100'}`}>{t.text}</p>{t.fixed && <Icon name="pin" size={14} className="text-amber-400 -rotate-45"/>}</div>
+                                                </div>
+                                                <div className="flex gap-2 opacity-0 action-btns transition-opacity z-10" onClick={e=>e.stopPropagation()}>
+                                                    {/* 操作改为 "编辑" 文字 */}
+                                                    <button onClick={()=>setModal({open:true, type:'twitter', data:t})} className="text-slate-400 hover:text-white text-xs font-medium px-3 py-1.5 hover:bg-white/10 rounded-lg transition-colors">编辑</button>
+                                                    <button onClick={()=>deleteData('twitter', t.id)} className="text-slate-400 hover:text-red-400 p-2 hover:bg-red-500/10 rounded-lg transition-colors"><Icon name="trash" size={16}/></button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* TAB: BD CRM */}
+                            {activeTab === 'crm' && (
+                                <div className="space-y-5 fade-in max-w-7xl mx-auto">
+                                    {/* 仪表盘 */}
+                                    <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
+                                        <div className="glass-panel px-5 pt-5 pb-3 rounded-2xl border border-white/5 relative overflow-hidden group hover:bg-white/[0.02] transition-colors flex flex-col h-28 justify-between">
+                                            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-violet-600 to-transparent"></div>
+                                            <div className="flex justify-between items-center h-6">
+                                                <div className="text-slate-400 text-xs font-bold uppercase tracking-widest">今日触达</div>
+                                                {isEditingKPI ? <input autoFocus type="number" className="w-16 bg-slate-800 border border-violet-500 rounded px-1 text-xs text-white outline-none" value={settings.dailyTarget} onBlur={()=>setIsEditingKPI(false)} onChange={e=>setSettings({...settings, dailyTarget:Number(e.target.value)})}/> : <div className="text-violet-400 text-xs font-mono cursor-pointer hover:text-white flex items-center gap-1 bg-violet-500/10 px-2 py-0.5 rounded-full" onClick={()=>setIsEditingKPI(true)} title="点击修改目标">目标: {settings.dailyTarget}</div>}
+                                            </div>
+                                            <div>
+                                                <div className="flex items-baseline gap-2">
+                                                    {/* 数字缩小 text-4xl -> text-3xl */}
+                                                    <span className="text-3xl font-bold text-white tracking-tighter">{stats.todayAction}</span>
+                                                    <span className="text-sm text-slate-500 font-medium">/ 完成</span>
+                                                </div>
+                                            </div>
+                                            <div className="w-full bg-slate-800/50 h-1.5 rounded-full overflow-hidden mt-1"><div className="bg-gradient-to-r from-violet-600 to-indigo-400 h-full transition-all duration-1000 ease-out shadow-[0_0_10px_rgba(139,92,246,0.5)]" style={{width: `${stats.kpiProgress}%`}}></div></div>
+                                        </div>
+                                        
+                                        <div className="glass-panel p-5 rounded-2xl border border-white/5 relative overflow-hidden group hover:bg-white/[0.02] flex flex-col h-28 justify-between">
+                                            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 to-transparent"></div>
+                                            <div className="flex items-center h-6">
+                                                <div className="text-slate-400 text-xs font-bold uppercase tracking-widest">本周新增</div>
+                                            </div>
+                                            {/* 数字缩小 text-4xl -> text-3xl */}
+                                            <div className="text-3xl font-bold text-white tracking-tighter">{stats.weeklyNew}</div>
+                                            <div className="h-1.5"></div>
+                                        </div>
+                                        
+                                        <div className="glass-panel p-5 rounded-2xl border border-white/5 relative overflow-hidden group hover:bg-white/[0.02] flex flex-col h-28 justify-between">
+                                            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-500 to-transparent"></div>
+                                            <div className="flex items-center h-6">
+                                                <div className="text-slate-400 text-xs font-bold uppercase tracking-widest">合作转化</div>
+                                            </div>
+                                            {/* 数字缩小 text-4xl -> text-3xl */}
+                                            <div className="text-3xl font-bold text-white tracking-tighter">{stats.partnered}</div>
+                                            <div className="h-1.5"></div>
+                                        </div>
+                                        
+                                        <button onClick={()=>{setReportModal({open:true, type:'crm_daily'}); generateReport('crm_daily')}} className="glass-panel p-5 rounded-2xl border border-white/5 hover:border-violet-500/30 bg-violet-500/5 hover:bg-violet-500/10 transition-all cursor-pointer group flex flex-col items-center justify-center relative overflow-hidden h-28">
+                                            <div className="absolute inset-0 bg-violet-500/10 blur-2xl opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                                            <Icon name="file-text" size={24} className="text-violet-400 mb-1 group-hover:scale-110 transition-transform relative z-10"/>
+                                            <span className="font-bold text-xs text-violet-200 relative z-10">生成 BD 专项汇报</span>
+                                        </button>
+                                    </div>
+
+                                    {/* 列表控制栏 */}
+                                    <div className="flex gap-6 border-b border-white/5 pb-2">
+                                        <button onClick={()=>setBdSubTab('targets')} className={`text-sm font-bold px-4 py-3 relative transition-colors ${bdSubTab==='targets' ? 'text-white' : 'text-slate-500 hover:text-slate-300'}`}>
+                                            目标管理 {bdSubTab==='targets' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-violet-500 shadow-[0_0_8px_rgba(139,92,246,0.6)]"></div>}
+                                        </button>
+                                        <button onClick={()=>setBdSubTab('scripts')} className={`text-sm font-bold px-4 py-3 relative transition-colors ${bdSubTab==='scripts' ? 'text-white' : 'text-slate-500 hover:text-slate-300'}`}>
+                                            话术库 {bdSubTab==='scripts' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-violet-500 shadow-[0_0_8px_rgba(139,92,246,0.6)]"></div>}
+                                        </button>
+                                    </div>
+
+                                    {bdSubTab === 'targets' && (
+                                        <>
+                                            <div className="flex gap-4 items-center mb-2">
+                                                <div className="relative flex-1 group">
+                                                    <Icon name="search" size={16} className="absolute left-3.5 top-3.5 text-slate-500 group-focus-within:text-violet-400 transition-colors"/>
+                                                    <input className="input-dark pl-11" placeholder="搜索目标名称、Handle..." value={searchTerm} onChange={e=>setSearchTerm(e.target.value)}/>
+                                                </div>
+                                                <select className="input-dark w-44 cursor-pointer" value={filterStatus} onChange={e=>setFilterStatus(e.target.value)}><option value="All">全部状态</option>{Object.entries(STATUS_MAP).map(([k,v]) => <option key={k} value={k} className="bg-slate-900">{v.label}</option>)}</select>
+                                                {/* 按钮缩小 text-xs, padding 调整 */}
+                                                <button onClick={()=>setModal({open:true, type:'contact', data:null})} className="bg-violet-600 hover:bg-violet-500 text-white px-4 py-2 rounded-xl flex items-center gap-2 font-medium text-xs shadow-lg shadow-violet-900/20 hover:-translate-y-0.5 transition-all"><Icon name="plus" size={16}/> 新增目标</button>
+                                            </div>
+                                            <div className="glass-panel rounded-2xl overflow-hidden overflow-x-auto border border-white/5">
+                                                <table className="w-full text-left text-sm min-w-[1000px]">
+                                                    <thead className="bg-slate-900/40 text-slate-400 font-medium border-b border-white/5 uppercase text-xs tracking-wider">
+                                                        <tr><th className="p-5 w-32 font-semibold">日期</th><th className="p-5 w-72 font-semibold">目标</th><th className="p-5 w-40 font-semibold">赛道</th><th className="p-5 w-28 font-semibold">分级</th><th className="p-5 w-40 font-semibold">状态</th><th className="p-5 font-semibold">情报 / 备注</th><th className="p-5 w-24 text-center font-semibold">操作</th></tr>
+                                                    </thead>
+                                                    <tbody className="divide-y divide-white/5 text-slate-300">
+                                                        {currentContacts.filter(c=>(filterStatus==='All'||c.status===filterStatus)&&c.name.toLowerCase().includes(searchTerm.toLowerCase())).map(c => (
+                                                            <tr key={c.id} className="hover:bg-white/[0.02] transition-colors group">
+                                                                <td className="p-5 text-slate-500 font-mono text-xs">{c.contactDate}</td>
+                                                                <td className="p-5"><div className="font-bold text-white text-base mb-1 group-hover:text-violet-300 transition-colors">{c.name}</div><div className="text-xs text-indigo-400 font-mono bg-indigo-500/10 px-2 py-0.5 rounded w-fit">{c.handle}</div></td>
+                                                                <td className="p-5"><div className="truncate max-w-[120px] bg-slate-800/50 px-3 py-1.5 rounded-lg text-xs border border-white/10 text-center">{c.platform||'-'}</div></td>
+                                                                <td className="p-5"><span className={`px-3 py-1 rounded-lg text-xs border nowrap-cell font-semibold tracking-wide ${TIER_MAP[c.tier]}`}>{c.tier}</span></td>
+                                                                <td className="p-5"><span className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs border nowrap-cell font-bold ${STATUS_MAP[c.status].color} bg-opacity-10 border-opacity-20`}>
+                                                                    <span className={`w-1.5 h-1.5 rounded-full ${STATUS_MAP[c.status].color.replace('text', 'bg')}`}></span>
+                                                                    {STATUS_MAP[c.status].label.split(' ')[1]}
+                                                                </span></td>
+                                                                <td className="p-5 text-slate-400 truncate max-w-xs text-xs leading-relaxed opacity-70 group-hover:opacity-100">{c.notes}</td>
+                                                                <td className="p-5 text-center">
+                                                                    {/* 操作改为 "编辑" 文字 */}
+                                                                    <button onClick={()=>setModal({open:true, type:'contact', data:c})} className="text-slate-500 hover:text-white text-xs font-medium px-3 py-1.5 hover:bg-white/10 rounded-lg transition-colors">编辑</button>
+                                                                </td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </>
+                                    )}
+                                    {bdSubTab === 'scripts' && (
+                                        <div className="grid gap-6">
+                                            <div className="flex justify-end"><button onClick={()=>setModal({open:true, type:'script', data:null})} className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm flex items-center gap-2 hover:bg-blue-500 transition-colors"><Icon name="plus" size={16}/> 添加话术</button></div>
+                                            {currentScripts.map(s => (
+                                                <div key={s.id} className="glass-panel p-6 rounded-2xl border border-white/5 relative group hover:border-blue-500/30 transition-all hover-lift">
+                                                    <div className="flex justify-between mb-4">
+                                                        <h3 className="font-bold text-blue-300 text-lg flex items-center gap-2"><Icon name="message-circle" size={18}/> {s.title}</h3>
+                                                        <div className="opacity-0 group-hover:opacity-100 flex gap-2 transition-opacity">
+                                                            <button onClick={()=>setModal({open:true, type:'script', data:s})} className="text-slate-400 hover:text-white text-xs px-3 py-1.5 bg-white/5 rounded-lg hover:bg-white/10 transition-colors">编辑</button>
+                                                            <button onClick={()=>copyToClipboard(s.content)} className="text-emerald-400 hover:text-emerald-300 text-xs px-3 py-1.5 bg-emerald-500/10 rounded-lg hover:bg-emerald-500/20 transition-colors flex gap-1 items-center"><Icon name="copy" size={12}/> 复制</button>
+                                                            <button onClick={()=>deleteData('script', s.id)} className="text-red-400 hover:text-red-300 text-xs px-3 py-1.5 bg-red-500/10 rounded-lg hover:bg-red-500/20 transition-colors">删除</button>
+                                                        </div>
+                                                    </div>
+                                                    <p className="text-slate-300 text-sm whitespace-pre-wrap font-mono bg-[#050b14]/50 p-5 rounded-xl border border-white/5 leading-7 selection:bg-blue-500/30">{s.content}</p>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {activeTab === 'incubator' && (
+                                <div className="space-y-6 fade-in max-w-7xl mx-auto">
+                                    <div className="glass-panel p-6 rounded-2xl border border-white/5">
+                                         {/* 带粗条标题 */}
+                                        <div className="flex items-center justify-between">
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-1.5 h-8 rounded-full bg-amber-500 shadow-[0_0_10px_rgba(245,158,11,0.5)]"></div>
+                                                <Icon name="rocket" className="text-amber-500" size={32}/>
+                                                {/* 字体缩小 text-2xl -> text-xl */}
+                                                <h2 className="text-xl font-bold text-white tracking-tight">孵化器 & VC 申请</h2>
+                                            </div>
+                                            
+                                            <div className="flex gap-4">
+                                                <select className="input-dark py-2 text-xs w-36 bg-slate-900" value={incubatorFilter} onChange={e=>setIncubatorFilter(e.target.value)}><option value="All">全部状态</option>{Object.entries(INCUBATOR_STATUS).map(([k,v])=><option key={k} value={k} className="bg-slate-900">{v.label.split(' ')[1]}</option>)}</select>
+                                                <select className="input-dark py-2 text-xs w-36 bg-slate-900" value={incubatorSort} onChange={e=>setIncubatorSort(e.target.value)}><option value="Newest">📅 最新投递</option><option value="Oldest">📅 最早投递</option></select>
+                                                {/* 按钮缩小 text-xs, padding 调整 */}
+                                                <button onClick={()=>setModal({open:true, type:'incubator', data:null})} className="bg-amber-600 hover:bg-amber-500 text-white px-4 py-2 rounded-xl flex items-center gap-2 font-medium text-xs shadow-lg hover:shadow-amber-500/20 transition-all"><Icon name="plus" size={16}/> 记录申请</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="glass-panel rounded-2xl overflow-hidden overflow-x-auto border border-white/5">
+                                        <table className="w-full text-left text-sm min-w-[900px]">
+                                            <thead className="bg-slate-900/40 text-slate-400 border-b border-white/5 uppercase text-xs tracking-wider"><tr><th className="p-5 w-32 nowrap-cell">投递日期</th><th className="p-5 w-56">机构名称</th><th className="p-5 w-64">链接</th><th className="p-5 w-36 nowrap-cell">状态</th><th className="p-5 nowrap-cell">备注</th><th className="p-5 w-24 text-center">操作</th></tr></thead>
+                                            <tbody className="divide-y divide-white/5 text-slate-300">
+                                                {currentIncubators.filter(i=>incubatorFilter==='All'||i.status===incubatorFilter).sort((a,b)=>incubatorSort==='Newest'?new Date(b.submitDate)-new Date(a.submitDate):new Date(a.submitDate)-new Date(b.submitDate)).map(i => (
+                                                    <tr key={i.id} className="hover:bg-white/[0.02] transition-colors"><td className="p-5 font-mono text-xs text-slate-500">{i.submitDate}</td><td className="p-5 font-bold text-white text-base truncate">{i.name}</td><td className="p-5 text-blue-400 hover:text-blue-300 underline truncate max-w-[250px] cursor-pointer transition-colors" onClick={()=>window.open(i.link.startsWith('http')?i.link:'https://'+i.link)}>{i.link}</td><td className="p-5"><span className={`px-3 py-1 rounded-lg text-xs whitespace-nowrap font-medium ${INCUBATOR_STATUS[i.status].color}`}>{INCUBATOR_STATUS[i.status].label}</span></td>
+                                                        <td className="p-5 text-slate-400 truncate max-w-md nowrap-cell min-w-[300px]" title={i.notes}>{i.notes}</td>
+                                                        <td className="p-5 text-center">
+                                                            {/* 操作改为 "编辑" 文字 */}
+                                                            <button onClick={()=>setModal({open:true, type:'incubator', data:i})} className="text-slate-500 hover:text-white text-xs font-medium px-3 py-1.5 hover:bg-white/10 rounded-lg transition-colors">编辑</button>
+                                                        </td></tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            )}
+
+                            {activeTab === 'docs' && (
+                                <div className="space-y-6 fade-in max-w-7xl mx-auto">
+                                    <div className="flex justify-between items-center mb-4">
+                                        {/* 带粗条标题 */}
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-1.5 h-8 rounded-full bg-indigo-500 shadow-[0_0_10px_rgba(99,102,241,0.5)]"></div>
+                                            <Icon name="folder-open" className="text-indigo-400" size={32}/>
+                                            {/* 文档中心字号保持一致 text-xl */}
+                                            <h2 className="text-xl font-bold text-white tracking-tight">文档中心</h2>
+                                        </div>
+                                        {/* 按钮缩小 text-xs, padding 调整 */}
+                                        <button onClick={()=>setModal({open:true, type:'doc', data:null})} className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-xl flex gap-2 text-xs font-medium shadow-lg hover:shadow-indigo-500/20 transition-all hover:-translate-y-0.5"><Icon name="plus" size={16}/> 新建文档</button>
+                                    </div>
+                                    {/* 增加列数以缩小卡片尺寸：lg:grid-cols-4 -> lg:grid-cols-5 */}
+                                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-5">
+                                        {currentDocs.length > 0 ? currentDocs.map(d => (
+                                            /* 卡片比例微调 aspect-[4/5]：整体更窄更小，符合需求 */
+                                            <div key={d.id} className="glass-panel p-5 rounded-2xl border border-white/5 hover:border-indigo-500/40 transition-all group relative cursor-pointer flex flex-col aspect-[4/5] hover-lift overflow-hidden" onClick={()=>setModal({open:true, type:'doc', data:d})}>
+                                                <div className="flex justify-between items-start mb-3 relative z-10">
+                                                    <span className="text-[10px] uppercase tracking-wider font-bold bg-slate-800/80 px-2 py-1 rounded-md text-slate-400 border border-white/5 truncate max-w-[100px]">{d.type}</span>
+                                                </div>
+                                                <div className="relative z-10 flex-1 min-h-0 flex flex-col">
+                                                    <h3 className="font-bold text-white text-lg line-clamp-2 mb-1 group-hover:text-indigo-300 transition-colors leading-snug" title={d.name}>{d.name}</h3>
+                                                    <p className="text-[10px] text-slate-500 mb-2 font-mono shrink-0">{d.uploadDate}</p>
+                                                    {d.content && <p className="text-xs text-slate-400 line-clamp-4 leading-relaxed flex-1 overflow-hidden text-ellipsis opacity-80">{d.content}</p>}
+                                                </div>
+                                                <div className="mt-auto pt-2 border-t border-white/5 flex items-center gap-1 text-[10px] text-indigo-400/60 group-hover:text-indigo-400 transition-colors relative z-10"><Icon name="eye" size={12}/> 查看详情</div>
+                                                <Icon name="file-text" size={110} className="absolute -bottom-6 -right-6 text-white/[0.03] -rotate-12 group-hover:scale-110 transition-transform pointer-events-none"/>
+                                            </div>
+                                        )) : <div className="col-span-5 text-center py-20 text-slate-500 border-2 border-dashed border-white/5 rounded-3xl bg-white/[0.01]">暂无文档</div>}
+                                    </div>
+                                </div>
+                            )}
+
+                            {activeTab === 'settings' && (
+                                <div className="max-w-3xl mx-auto glass-panel p-12 rounded-3xl fade-in border border-white/5">
+                                    {/* 带粗条标题 */}
+                                    <div className="flex items-center gap-3 mb-10">
+                                        <div className="w-1.5 h-8 rounded-full bg-slate-500 shadow-[0_0_10px_rgba(100,116,139,0.5)]"></div>
+                                        <Icon name="settings" className="text-slate-400" size={32}/>
+                                        {/* 字体缩小 text-2xl -> text-xl */}
+                                        <h2 className="text-xl font-bold text-white tracking-tight">设置</h2>
+                                    </div>
+                                    
+                                    <div className="space-y-12">
+                                        {/* 1. 项目设置 */}
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-500 uppercase mb-4 tracking-widest flex items-center gap-2"><Icon name="layout" size={14}/> 项目设置</label>
+                                            <input className="input-dark mb-6 text-lg font-medium" value={activeProject.name} onChange={e=>setProjects(projects.map(p=>p.id===activePid?{...p,name:e.target.value}:p))} placeholder="项目名称"/>
+                                            <div className="flex items-center gap-6">
+                                                <div className="w-24 h-24 rounded-2xl bg-slate-800 overflow-hidden border border-white/10 shadow-xl group relative">
+                                                    {activeProject.avatar ? <img src={activeProject.avatar} className="w-full h-full object-cover"/> : <div className="flex items-center justify-center w-full h-full text-xs text-slate-500">No Img</div>}
+                                                    <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-xs text-white">Change</div>
+                                                </div>
+                                                <label className="bg-slate-800 hover:bg-slate-700 text-white px-6 py-3 rounded-xl text-sm cursor-pointer shadow-lg transition-all border border-white/10 font-medium hover:-translate-y-0.5 text-center">上传 Logo <input type="file" className="hidden" accept="image/*" onChange={e=>{const f=e.target.files[0]; if(f){const r=new FileReader(); r.onload=ev=>{setProjects(projects.map(p=>p.id===activePid?{...p,avatar:ev.target.result}:p))}; r.readAsDataURL(f);}}}/></label>
+                                            </div>
+                                        </div>
+
+                                        {/* 2. 数据备份 */}
+                                        <div className="border-t border-white/5 pt-10">
+                                            <label className="block text-xs font-bold text-slate-500 uppercase mb-4 tracking-widest flex items-center gap-2"><Icon name="database" size={14}/> 数据备份</label>
+                                            <div className="flex gap-5">
+                                                <button onClick={exportData} className="flex-1 bg-slate-800 hover:bg-indigo-600 text-white py-4 rounded-xl text-sm border border-white/10 transition-all flex items-center justify-center gap-2 font-medium hover:shadow-lg hover:shadow-indigo-500/20"><Icon name="download" size={16}/> 导出 JSON 备份</button>
+                                                <label className="flex-1 bg-slate-800 hover:bg-emerald-600 text-white py-4 rounded-xl text-sm border border-white/10 text-center cursor-pointer transition-all flex items-center justify-center gap-2 font-medium hover:shadow-lg hover:shadow-emerald-500/20"><Icon name="upload" size={16}/> 导入 JSON 恢复 <input type="file" className="hidden" onChange={importData}/></label>
+                                            </div>
+                                        </div>
+
+                                        {/* 3. 云端配置 */}
+                                        <div className="border-t border-white/5 pt-10">
+                                            <label className="block text-xs font-bold text-emerald-400 uppercase mb-4 flex items-center gap-2 tracking-widest"><Icon name="cloud" size={14}/> 云端协作配置 (Firebase)</label>
+                                            <div className="bg-slate-900/40 p-6 rounded-2xl border border-white/5">
+                                                <textarea className="input-dark h-24 text-xs font-mono" placeholder='在此粘贴 Firebase JSON 配置...' onChange={handleConfigPaste}></textarea>
+                                                <p className="text-xs text-slate-500 mt-3">* 粘贴后配置将自动保存至本地，刷新即生效。</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                        </main>
+                    </div>
+
+                    {/* 弹窗保持不变 */}
+                    {modal.open && (
+                        <div className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-50 p-4 transition-all duration-300">
+                             <div className={`bg-[#0f172a] border border-slate-700/50 p-8 rounded-3xl shadow-2xl modal-in relative ${modal.type==='doc'?'w-full max-w-4xl':'w-full max-w-lg'} bg-gradient-to-b from-[#1e293b] to-[#0f172a]`}>
+                                <button onClick={()=>setModal({open:false,type:'',data:null})} className="absolute top-6 right-6 text-slate-500 hover:text-white transition-colors bg-white/5 p-2 rounded-full hover:bg-white/10"><Icon name="x" size={18}/></button>
+                                <h3 className="text-xl font-bold text-white mb-8 flex items-center gap-3">
+                                    <span className="w-1 h-6 bg-indigo-500 rounded-full"></span>
+                                    {modal.data ? '编辑' : '添加'} {modal.type === 'contact' ? 'BD目标' : modal.type === 'incubator' ? '申请记录' : modal.type === 'doc' ? '文档' : modal.type === 'todo' ? '待办事项' : modal.type === 'script' ? '话术' : '推特任务'}
+                                </h3>
+                                <form onSubmit={e => {
+                                    e.preventDefault();
+                                    const formData = new FormData(e.target);
+                                    const rawData = Object.fromEntries(formData.entries());
+                                    if (modal.type === 'twitter' || modal.type === 'todo') rawData.fixed = formData.get('fixed') === 'on'; 
+                                    saveData(modal.type, rawData);
+                                }} className="space-y-6">
+                                    
+                                    {modal.type === 'contact' && <><div className="grid grid-cols-2 gap-5"><input name="name" className="input-dark" placeholder="名称" defaultValue={modal.data?.name} required/><input name="handle" className="input-dark" placeholder="Handle (@xxx)" defaultValue={modal.data?.handle}/></div><div className="grid grid-cols-2 gap-5"><input name="platform" className="input-dark" placeholder="赛道 / 平台" defaultValue={modal.data?.platform}/><select name="tier" className="input-dark bg-slate-800" defaultValue={modal.data?.tier || 'Tier 2'}><option>Tier 1</option><option>Tier 2</option><option>Tier 3</option></select></div><div className="grid grid-cols-2 gap-5"><select name="status" className="input-dark bg-slate-800" defaultValue={modal.data?.status || 'To Contact'}>{Object.entries(STATUS_MAP).map(([k,v]) => <option key={k} value={k}>{v.label.split(' ')[1]}</option>)}</select><input name="contactDate" type="date" className="input-dark text-slate-300" defaultValue={modal.data?.contactDate || todayStr()}/></div><textarea name="notes" className="input-dark" rows="4" placeholder="重要情报 / 备注..." defaultValue={modal.data?.notes}></textarea></>}
+
+                                    {modal.type === 'incubator' && <><input name="name" className="input-dark" placeholder="机构名称" defaultValue={modal.data?.name} required/><input name="link" className="input-dark" placeholder="申请链接" defaultValue={modal.data?.link}/><div className="grid grid-cols-2 gap-5"><select name="status" className="input-dark bg-slate-800" defaultValue={modal.data?.status || 'Preparing'}>{Object.entries(INCUBATOR_STATUS).map(([k,v]) => <option key={k} value={k}>{v.label.split(' ')[1]}</option>)}</select><input name="submitDate" type="date" className="input-dark text-slate-300" defaultValue={modal.data?.submitDate || todayStr()}/></div><textarea name="notes" className="input-dark" rows="4" placeholder="备注..." defaultValue={modal.data?.notes}></textarea></>}
+
+                                    {modal.type === 'doc' && <><input name="name" className="input-dark font-bold text-lg" placeholder="文档标题" defaultValue={modal.data?.name} required/><div className="grid grid-cols-2 gap-5"><input name="type" className="input-dark" placeholder="分类 (e.g. Deck, 会议纪要)" defaultValue={modal.data?.type} required/><input name="link" className="input-dark" placeholder="外部链接 (Notion/DocSend...)" defaultValue={modal.data?.link}/></div><textarea name="content" className="input-dark font-mono text-sm leading-relaxed" rows="18" placeholder="在此输入文档内容..." defaultValue={modal.data?.content} required></textarea></>}
+
+                                    {(modal.type === 'twitter' || modal.type === 'todo') && <><input name="text" className="input-dark" placeholder="任务内容" defaultValue={modal.data?.text} required/>{modal.type === 'todo' && <div className="grid grid-cols-2 gap-5"><input name="deadline" type="datetime-local" className="input-dark text-slate-300" defaultValue={modal.data?.deadline}/><div className="flex items-center gap-3 bg-white/5 rounded-xl px-4 border border-white/5"><input type="checkbox" name="fixed" id="fixed_check" defaultChecked={modal.data?.fixed} className="w-5 h-5 rounded border-slate-600 text-indigo-500 focus:ring-offset-0 focus:ring-0"/><label htmlFor="fixed_check" className="text-sm text-slate-300 select-none cursor-pointer">固定置顶</label></div></div>}{modal.type === 'twitter' && <div className="flex items-center gap-3 mt-2 bg-white/5 p-3 rounded-xl w-fit"><input type="checkbox" name="fixed" id="fixed_check_tw" defaultChecked={modal.data?.fixed} className="w-5 h-5"/><label htmlFor="fixed_check_tw" className="text-sm text-slate-300 select-none cursor-pointer">固定任务</label></div>}</>}
+                                    
+                                    {modal.type === 'script' && <><input name="title" className="input-dark" placeholder="话术标题" defaultValue={modal.data?.title} required/><textarea name="content" className="input-dark font-mono text-sm leading-7" rows="8" placeholder="话术内容..." defaultValue={modal.data?.content} required></textarea></>}
+
+                                    {modal.data?.id && <input type="hidden" name="id" value={modal.data.id}/>}
+                                    
+                                    <div className="flex justify-between pt-6 border-t border-white/5 mt-4">
+                                        {modal.data && <button type="button" onClick={()=>deleteData(modal.type, modal.data.id)} className="text-red-400 text-sm hover:text-red-300 transition-colors bg-red-500/10 px-4 py-2 rounded-lg">删除此项</button>}
+                                        <div className="flex gap-4 ml-auto"><button type="button" onClick={()=>setModal({open:false,type:'',data:null})} className="text-slate-400 px-6 py-2 hover:text-white transition-colors">取消</button><button type="submit" className="bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white px-8 py-2.5 rounded-xl shadow-lg shadow-indigo-500/25 font-semibold transition-all hover:-translate-y-0.5">保存更改</button></div>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    )}
+                     {reportModal.open && (
+                        <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 p-6">
+                            <div className="bg-[#0f172a] border border-slate-700/50 rounded-3xl w-full max-w-4xl h-[85vh] flex flex-col shadow-2xl modal-in overflow-hidden relative">
+                                <div className="flex bg-slate-900/80 border-b border-white/5 p-2 backdrop-blur-xl">
+                                    {reportModal.type.startsWith('global') ? <button className="flex-1 py-4 text-sm font-bold border-b-2 border-emerald-500 text-white bg-white/5 rounded-t-lg">☀️ 综合日报</button> : ['crm_daily','crm_weekly','crm_total'].map(t => (<button key={t} onClick={()=>{setReportModal({...reportModal, type:t}); generateReport(t)}} className={`flex-1 py-4 text-sm font-bold border-b-2 transition-all rounded-t-lg ${reportModal.type===t?'border-indigo-500 text-white bg-white/5':'border-transparent text-slate-500 hover:text-slate-300 hover:bg-white/[0.02]'}`}>{t==='crm_daily'?'🛡️ BD日报':t==='crm_weekly'?'BD周报':'BD总览'}</button>))}
+                                    <button onClick={()=>setReportModal({open:false})} className="px-6 text-slate-500 hover:text-white border-l border-white/5 hover:bg-white/5 transition-colors"><Icon name="x"/></button>
+                                </div>
+                                <textarea className="flex-1 bg-[#0f172a] p-10 text-slate-300 font-mono text-sm outline-none resize-none leading-relaxed selection:bg-indigo-500/30" readOnly value={generatedReport}></textarea>
+                                <div className="p-6 border-t border-white/5 flex justify-end gap-4 bg-slate-900/60 backdrop-blur-xl"><button onClick={()=>setReportModal({open:false})} className="text-slate-400 px-6 py-2 hover:text-white transition-colors">关闭</button><button onClick={()=>{copyToClipboard(generatedReport)}} className="bg-emerald-600 hover:bg-emerald-500 text-white px-8 py-2.5 rounded-xl flex items-center gap-2 font-bold shadow-lg shadow-emerald-500/20 transition-all hover:-translate-y-0.5"><Icon name="copy" size={16}/> 一键复制</button></div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
